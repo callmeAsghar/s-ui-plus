@@ -1,5 +1,6 @@
-name: 构建 Windows 版 S-UI
+name: Windows build (manual)
 
+# Full releases (Linux + Windows): push a `v*` tag or run the "Release" workflow.
 on:
   workflow_dispatch:
     inputs:

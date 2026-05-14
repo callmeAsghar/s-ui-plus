@@ -1,10 +1,15 @@
-name: 发布 S-UI
+name: Release
 
+# Automatic: push a version tag (e.g. v1.5.0) to create/update a GitHub Release with Linux + Windows assets.
+# Manual: Actions → Release → Run workflow, enter tag.
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: "发布标签"
+        description: "Release tag (e.g. v1.5.0)"
         required: true
         default: "v1.4.1"
         type: string
@@ -17,31 +22,33 @@ env:
   CRONET_GO_VERSION: "2fef65f9dba90ddb89a87d00a6eb6165487c10c1"
   CRONET_GO_REPO: https://github.com/sagernet/cronet-go.git
   BOOTLIN_BASE_URL: https://toolchains.bootlin.com/downloads/releases/toolchains
+  WIN_TAGS: "with_quic,with_grpc,with_utls,with_acme,with_gvisor,with_naive_outbound,with_purego,badlinkname,tfogo_checklinkname0,with_tailscale"
+  LIBCRONET_BASE_URL: "https://github.com/SagerNet/cronet-go/releases/latest/download"
 
 jobs:
   build-frontend:
     runs-on: ubuntu-latest
     steps:
-      - name: 检出仓库
+      - name: Checkout
         uses: actions/checkout@v6.0.2
         with:
           submodules: recursive
           fetch-depth: 1
 
-      - name: 设置 Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: 构建前端
+      - name: Build frontend
         run: |
           cd frontend
           npm install
           npm run build
 
-      - name: 上传前端构建产物
+      - name: Upload frontend dist
         uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
@@ -49,7 +56,7 @@ jobs:
           retention-days: 1
 
   build-linux:
-    name: 构建-${{ matrix.platform }}
+    name: linux-${{ matrix.platform }}
     needs: build-frontend
     strategy:
       fail-fast: false
@@ -64,22 +71,22 @@ jobs:
           - { platform: s390x, arch: s390x, bootlin: s390x-z13, naive: false }
     runs-on: ubuntu-latest
     steps:
-      - name: 检出仓库
+      - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: 下载前端构建产物
+      - name: Download frontend dist
         uses: actions/download-artifact@v8
         with:
           name: frontend-dist
           path: web/html
 
-      - name: 设置 Go
+      - name: Set up Go
         uses: actions/setup-go@v6
         with:
           cache: false
           go-version-file: go.mod
 
-      - name: 克隆 cronet-go（naive 平台）
+      - name: Clone cronet-go (naive platforms)
         if: matrix.naive
         run: |
           set -e
@@ -89,7 +96,7 @@ jobs:
           git -C ~/cronet-go checkout FETCH_HEAD
           git -C ~/cronet-go submodule update --init --recursive --depth=1
 
-      - name: 重新生成 Debian keyring（cronet sysroot）
+      - name: Regenerate Debian keyring (cronet sysroot)
         if: matrix.naive
         run: |
           set -e
@@ -97,7 +104,7 @@ jobs:
           cd ~/cronet-go
           GPG_TTY=/dev/null ./naiveproxy/src/build/linux/sysroot_scripts/generate_keyring.sh
 
-      - name: 构建 cronet 库并设置工具链环境
+      - name: Build cronet and export toolchain env
         if: matrix.naive
         run: |
           set -e
@@ -109,23 +116,23 @@ jobs:
             echo "$line" >> $GITHUB_ENV
           done
 
-      - name: 设置 Go 构建环境
+      - name: Go build environment
         run: |
           echo "CGO_ENABLED=1" >> $GITHUB_ENV
           echo "GOOS=linux" >> $GITHUB_ENV
           echo "GOARCH=${{ matrix.arch }}" >> $GITHUB_ENV
           if [ -n "${{ matrix.goarm }}" ]; then echo "GOARM=${{ matrix.goarm }}" >> $GITHUB_ENV; fi
 
-      - name: 设置 Bootlin musl（非 naive 平台）
+      - name: Bootlin musl toolchain (non-naive)
         if: ${{ matrix.naive != true }}
         run: |
           set -e
           BOOTLIN_ARCH="${{ matrix.bootlin }}"
-          echo "正在解析 arch=$BOOTLIN_ARCH 的 Bootlin musl 工具链（平台=${{ matrix.platform }}）"
+          echo "Resolving Bootlin musl toolchain for $BOOTLIN_ARCH (${{ matrix.platform }})"
           TARBALL_BASE="${{ env.BOOTLIN_BASE_URL }}/$BOOTLIN_ARCH/tarballs/"
           TARBALL_URL=$(curl -fsSL "$TARBALL_BASE" | grep -oE "${BOOTLIN_ARCH}--musl--stable-[^\"]+\\.tar\\.xz" | sort -r | head -n1)
-          [ -z "$TARBALL_URL" ] && { echo "未找到 arch=$BOOTLIN_ARCH 的 Bootlin musl 工具链" >&2; exit 1; }
-          echo "正在下载：$TARBALL_URL"
+          [ -z "$TARBALL_URL" ] && { echo "No Bootlin musl toolchain for $BOOTLIN_ARCH" >&2; exit 1; }
+          echo "Downloading $TARBALL_URL"
           cd /tmp
           curl -fL -sS -o "$(basename "$TARBALL_URL")" "$TARBALL_BASE/$TARBALL_URL"
           tar -xf "$(basename "$TARBALL_URL")"
@@ -134,7 +141,7 @@ jobs:
           BIN_DIR="$TOOLCHAIN_DIR/bin"
           echo "PATH=$BIN_DIR:$PATH" >> $GITHUB_ENV
           CC=$(find "$BIN_DIR" -maxdepth 1 \( -name '*-gcc.br_real' -o -name '*-gcc' \) -type f -executable 2>/dev/null | grep -v g++ | head -n1)
-          [ -z "$CC" ] && { echo "在 $BIN_DIR 中未找到 gcc" >&2; exit 1; }
+          [ -z "$CC" ] && { echo "gcc not found in $BIN_DIR" >&2; exit 1; }
           echo "CC=$(realpath "$CC")" >> $GITHUB_ENV
           SYSROOT=""
           F=$(find "$TOOLCHAIN_DIR" -name "libc-header-start.h" 2>/dev/null | head -1)
@@ -144,56 +151,129 @@ jobs:
             echo "CGO_LDFLAGS=--sysroot=$SYSROOT -static" >> $GITHUB_ENV
           fi
 
-      - name: 构建 s-ui
+      - name: Build s-ui (Linux)
         run: |
           set -e
           BUILD_TAGS="with_quic,with_grpc,with_utls,with_acme,with_gvisor,badlinkname,tfogo_checklinkname0,with_tailscale"
           [ "${{ matrix.naive }}" = "true" ] && BUILD_TAGS="${BUILD_TAGS},with_naive_outbound,with_musl"
           go build -ldflags="-w -s -checklinkname=0 -linkmode external -extldflags '-static'" -tags "$BUILD_TAGS" -o sui main.go
           file sui
-          ldd sui 2>/dev/null || echo "已确认静态二进制文件"
+          ldd sui 2>/dev/null || echo "Static binary OK"
 
           mkdir s-ui
           cp sui s-ui/
           cp s-ui.service s-ui/
           cp s-ui.sh s-ui/
 
-      - name: 打包
+      - name: Pack tarball
         run: tar -zcvf s-ui-linux-${{ matrix.platform }}.tar.gz s-ui
 
-      - name: 上传构建产物
+      - name: Upload Linux artifact
         uses: actions/upload-artifact@v7
         with:
           name: s-ui-linux-${{ matrix.platform }}
           path: ./s-ui-linux-${{ matrix.platform }}.tar.gz
           retention-days: 1
 
-  publish-linux:
-    name: 发布 Linux 产物
-    needs: build-linux
+  build-windows:
+    needs: build-frontend
+    name: windows-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: windows-latest, cgo: "1" }
+          - { arch: arm64, runner: ubuntu-latest, cgo: "0" }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: web/html
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          cache: false
+          go-version-file: go.mod
+
+      - name: Install zip (Windows amd64)
+        if: matrix.arch == 'amd64'
+        shell: powershell
+        run: |
+          if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+            iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          }
+          choco install zip -y
+
+      - name: Build s-ui (Windows)
+        shell: bash
+        run: |
+          export CGO_ENABLED=${{ matrix.cgo }}
+          export GOOS=windows
+          export GOARCH=${{ matrix.arch }}
+          go version
+          go env GOOS GOARCH
+          go build -ldflags="-w -s -checklinkname=0" -tags "${{ env.WIN_TAGS }}" -o sui.exe main.go
+          file sui.exe
+          mkdir s-ui-windows
+          cp sui.exe s-ui-windows/
+          cp -r windows/* s-ui-windows/
+
+      - name: Download libcronet
+        shell: bash
+        run: |
+          curl -qsL -o s-ui-windows/libcronet.dll ${{ env.LIBCRONET_BASE_URL }}/libcronet-windows-${{ matrix.arch }}.dll
+
+      - name: Pack zip
+        shell: bash
+        run: zip -r "s-ui-windows-${{ matrix.arch }}.zip" s-ui-windows
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: s-ui-windows-${{ matrix.arch }}
+          path: ./s-ui-windows-${{ matrix.arch }}.zip
+          retention-days: 1
+
+  publish:
+    name: Publish GitHub Release
+    needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     steps:
-      - name: 规范化发布标签
+      - name: Resolve release tag
         id: vars
         run: |
-          TAG="${{ inputs.tag }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
           case "$TAG" in
             v*) echo "tag=$TAG" >> "$GITHUB_OUTPUT" ;;
             *) echo "tag=v$TAG" >> "$GITHUB_OUTPUT" ;;
           esac
 
-      - name: 下载 Linux 构建产物
+      - name: Download all release assets
         uses: actions/download-artifact@v8
         with:
-          pattern: s-ui-linux-*
+          pattern: s-ui-*
           path: release-assets
           merge-multiple: true
 
-      - name: 发布到当前仓库 Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.vars.outputs.tag }}
-          name: s-ui ${{ steps.vars.outputs.tag }}
+          name: s-ui-plus ${{ steps.vars.outputs.tag }}
           target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          make_latest: true
           fail_on_unmatched_files: true
           files: release-assets/*
