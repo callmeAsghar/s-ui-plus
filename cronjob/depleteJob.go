@@ -25,6 +25,8 @@ func (s *DepleteJob) Run() {
 		err := s.InboundService.RestartInbounds(database.GetDB(), inboundIds)
 		if err != nil {
 			logger.Error("unable to restart inbounds: ", err)
+		} else {
+			service.RefreshConnTrackerSingleIp(&s.ClientService)
 		}
 	}
 }

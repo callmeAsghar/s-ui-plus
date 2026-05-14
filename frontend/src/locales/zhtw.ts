@@ -211,6 +211,7 @@ export default {
     autoReset: "自動重置",
     resetDays: "重置天數",
     nextReset: "下次重置",
+    singleSourceIp: "單一來源 IP（每個用戶端名稱僅允許一個使用中來源 IP）",
   },
   bulk: {
     order: "排序",

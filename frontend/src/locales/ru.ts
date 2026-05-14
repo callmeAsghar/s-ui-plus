@@ -212,6 +212,7 @@ export default {
     autoReset: "Авто сброс",
     resetDays: "Дней до сброса",
     nextReset: "Следующий сброс",
+    singleSourceIp: "Один исходящий IP (один активный IP на имя клиента)",
   },
   bulk: {
     order: "Порядок",

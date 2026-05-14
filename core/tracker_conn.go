@@ -20,16 +20,34 @@ type ConnectionInfo struct {
 	PacketConn network.PacketConn
 	Inbound    string
 	Type       string // "tcp" or "udp"
+	User       string
+	SourceIP   string
 }
 
 type ConnTracker struct {
-	access      sync.Mutex
-	connections map[string]*ConnectionInfo
+	access       sync.Mutex
+	connections  map[string]*ConnectionInfo
+	singleIPUser map[string]struct{}
+	// user (sing-box client name) -> source IP -> connection IDs
+	userIPConns map[string]map[string]map[string]struct{}
 }
 
 func NewConnTracker() *ConnTracker {
 	return &ConnTracker{
-		connections: make(map[string]*ConnectionInfo),
+		connections:  make(map[string]*ConnectionInfo),
+		singleIPUser: make(map[string]struct{}),
+		userIPConns:  make(map[string]map[string]map[string]struct{}),
+	}
+}
+
+func (c *ConnTracker) SetSingleIpUsers(names []string) {
+	c.access.Lock()
+	defer c.access.Unlock()
+	c.singleIPUser = make(map[string]struct{}, len(names))
+	for _, n := range names {
+		if n != "" {
+			c.singleIPUser[n] = struct{}{}
+		}
 	}
 }
 
@@ -45,36 +63,168 @@ func (c *ConnTracker) Reset() {
 		}
 	}
 	c.connections = make(map[string]*ConnectionInfo)
+	c.userIPConns = make(map[string]map[string]map[string]struct{})
 }
 
 func (c *ConnTracker) generateConnectionID() string {
 	return uuid.Must(uuid.NewV4()).String()
 }
 
+func hostFromNetAddr(addr net.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	s := addr.String()
+	host, _, err := net.SplitHostPort(s)
+	if err != nil {
+		if ip := net.ParseIP(s); ip != nil {
+			return ip.String()
+		}
+		return s
+	}
+	if h := net.ParseIP(host); h != nil {
+		return h.String()
+	}
+	return host
+}
+
+func (c *ConnTracker) singleIPEnforced(user string) bool {
+	if user == "" {
+		return false
+	}
+	_, ok := c.singleIPUser[user]
+	return ok
+}
+
+func (c *ConnTracker) collectEvictionsLocked(user, newIP string) []*ConnectionInfo {
+	if newIP == "" || !c.singleIPEnforced(user) {
+		return nil
+	}
+	byIP, ok := c.userIPConns[user]
+	if !ok {
+		return nil
+	}
+	var out []*ConnectionInfo
+	for ip, ids := range byIP {
+		if ip == newIP {
+			continue
+		}
+		for id := range ids {
+			if ci, exists := c.connections[id]; exists {
+				out = append(out, ci)
+			}
+		}
+	}
+	return out
+}
+
+func (c *ConnTracker) unlinkConnLocked(connID string, ci *ConnectionInfo) {
+	delete(c.connections, connID)
+	if ci.User == "" || ci.SourceIP == "" {
+		return
+	}
+	byIP, ok := c.userIPConns[ci.User]
+	if !ok {
+		return
+	}
+	set, ok := byIP[ci.SourceIP]
+	if !ok {
+		return
+	}
+	delete(set, connID)
+	if len(set) == 0 {
+		delete(byIP, ci.SourceIP)
+	}
+	if len(byIP) == 0 {
+		delete(c.userIPConns, ci.User)
+	}
+}
+
+func (c *ConnTracker) linkConnLocked(connID string, ci *ConnectionInfo) {
+	if ci.User == "" || ci.SourceIP == "" || !c.singleIPEnforced(ci.User) {
+		return
+	}
+	if c.userIPConns[ci.User] == nil {
+		c.userIPConns[ci.User] = make(map[string]map[string]struct{})
+	}
+	if c.userIPConns[ci.User][ci.SourceIP] == nil {
+		c.userIPConns[ci.User][ci.SourceIP] = make(map[string]struct{})
+	}
+	c.userIPConns[ci.User][ci.SourceIP][connID] = struct{}{}
+}
+
 func (c *ConnTracker) RoutedConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, matchedRule adapter.Rule, matchOutbound adapter.Outbound) net.Conn {
 	connID := c.generateConnectionID()
-	connInfo := &ConnectionInfo{
-		ID:      connID,
-		Conn:    conn,
-		Inbound: metadata.Inbound,
-		Type:    "tcp",
-	}
+	user := metadata.User
+	srcIP := hostFromNetAddr(conn.RemoteAddr())
 
-	c.trackConnection(connID, connInfo)
+	var evict []*ConnectionInfo
+	c.access.Lock()
+	evict = c.collectEvictionsLocked(user, srcIP)
+	for _, ci := range evict {
+		c.unlinkConnLocked(ci.ID, ci)
+	}
+	connInfo := &ConnectionInfo{
+		ID:       connID,
+		Conn:     conn,
+		Inbound:  metadata.Inbound,
+		Type:     "tcp",
+		User:     user,
+		SourceIP: srcIP,
+	}
+	c.connections[connID] = connInfo
+	c.linkConnLocked(connID, connInfo)
+	c.access.Unlock()
+
+	for _, ci := range evict {
+		if ci.Conn != nil {
+			_ = ci.Conn.Close()
+		}
+		if ci.PacketConn != nil {
+			_ = ci.PacketConn.Close()
+		}
+	}
 
 	return c.createWrappedConn(conn, connID)
 }
 
 func (c *ConnTracker) RoutedPacketConnection(ctx context.Context, conn network.PacketConn, metadata adapter.InboundContext, matchedRule adapter.Rule, matchOutbound adapter.Outbound) network.PacketConn {
 	connID := c.generateConnectionID()
+	user := metadata.User
+	srcIP := ""
+	type withRemote interface {
+		RemoteAddr() net.Addr
+	}
+	if wr, ok := conn.(withRemote); ok {
+		srcIP = hostFromNetAddr(wr.RemoteAddr())
+	}
+
+	var evict []*ConnectionInfo
+	c.access.Lock()
+	evict = c.collectEvictionsLocked(user, srcIP)
+	for _, ci := range evict {
+		c.unlinkConnLocked(ci.ID, ci)
+	}
 	connInfo := &ConnectionInfo{
 		ID:         connID,
 		PacketConn: conn,
 		Inbound:    metadata.Inbound,
 		Type:       "udp",
+		User:       user,
+		SourceIP:   srcIP,
 	}
+	c.connections[connID] = connInfo
+	c.linkConnLocked(connID, connInfo)
+	c.access.Unlock()
 
-	c.trackConnection(connID, connInfo)
+	for _, ci := range evict {
+		if ci.Conn != nil {
+			_ = ci.Conn.Close()
+		}
+		if ci.PacketConn != nil {
+			_ = ci.PacketConn.Close()
+		}
+	}
 
 	return c.createWrappedPacketConn(conn, connID)
 }
@@ -83,32 +233,34 @@ func (c *ConnTracker) CloseConnByInbound(inbound string) int {
 	c.access.Lock()
 	defer c.access.Unlock()
 
-	closedCount := 0
-	for connID, connInfo := range c.connections {
+	var toClose []*ConnectionInfo
+	for _, connInfo := range c.connections {
 		if connInfo.Inbound == inbound {
-			if connInfo.Conn != nil {
-				connInfo.Conn.Close()
-			}
-			if connInfo.PacketConn != nil {
-				connInfo.PacketConn.Close()
-			}
-			delete(c.connections, connID)
-			closedCount++
+			toClose = append(toClose, connInfo)
 		}
 	}
+	closedCount := 0
+	for _, connInfo := range toClose {
+		c.unlinkConnLocked(connInfo.ID, connInfo)
+		if connInfo.Conn != nil {
+			connInfo.Conn.Close()
+		}
+		if connInfo.PacketConn != nil {
+			connInfo.PacketConn.Close()
+		}
+		closedCount++
+	}
 	return closedCount
-}
-
-func (c *ConnTracker) trackConnection(connID string, connInfo *ConnectionInfo) {
-	c.access.Lock()
-	defer c.access.Unlock()
-	c.connections[connID] = connInfo
 }
 
 func (c *ConnTracker) untrackConnection(connID string) {
 	c.access.Lock()
 	defer c.access.Unlock()
-	delete(c.connections, connID)
+	ci, ok := c.connections[connID]
+	if !ok {
+		return
+	}
+	c.unlinkConnLocked(connID, ci)
 }
 
 // shouldUntrackIOErr reports whether err indicates the connection is done (peer closed, reset, etc.).

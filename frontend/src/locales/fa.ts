@@ -211,6 +211,7 @@ export default {
     autoReset: "بازنشانی خودکار",
     resetDays: "روزهای بازنشانی",
     nextReset: "بازنشانی بعدی",
+    singleSourceIp: "IP منبع واحد (یک IP فعال برای هر نام کاربر)",
   },
   bulk: {
     order: "ترتیب",

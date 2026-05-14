@@ -211,6 +211,7 @@ export default {
     autoReset: "Auto Reset",
     resetDays: "Reset Days",
     nextReset: "Next Reset",
+    singleSourceIp: "Single source IP (one active IP per client name)",
   },
   bulk: {
     order: "Order",

@@ -211,6 +211,7 @@ export default {
     autoReset: "自动重置",
     resetDays: "重置天数",
     nextReset: "下次重置",
+    singleSourceIp: "单源 IP（每个客户端名仅允许一个活跃来源 IP）",
   },
   bulk: {
     order: "排序",

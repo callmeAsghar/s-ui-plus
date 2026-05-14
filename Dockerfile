@@ -1,3 +1,4 @@
+# s-ui-plus — build: https://github.com/callmeAsghar/s-ui-plus
 FROM --platform=$BUILDPLATFORM node:alpine AS front-builder
 WORKDIR /app
 COPY frontend/ ./

@@ -121,6 +121,7 @@ func (s *ConfigService) StartCore() error {
 		logger.Error("start sing-box err:", err.Error())
 		return err
 	}
+	s.syncConnTrackerSingleIp()
 	logger.Info("sing-box started")
 	return nil
 }
@@ -162,6 +163,7 @@ func (s *ConfigService) restartCoreWithConfig(config json.RawMessage) error {
 		logger.Error("restart sing-box err (start):", err.Error())
 		return err
 	}
+	s.syncConnTrackerSingleIp()
 	logger.Info("sing-box restarted with new config")
 	return nil
 }
@@ -185,6 +187,32 @@ func (s *ConfigService) CheckOutbound(tag string, link string) core.CheckOutboun
 	return core.CheckOutbound(corePtr.GetCtx(), tag, link)
 }
 
+func (s *ConfigService) syncConnTrackerSingleIp() {
+	RefreshConnTrackerSingleIp(&s.ClientService)
+}
+
+// RefreshConnTrackerSingleIp updates the embedded sing-box connection tracker allowlist
+// (e.g. after cron jobs or other code paths that mutate clients without ConfigService.Save).
+func RefreshConnTrackerSingleIp(cs *ClientService) {
+	if corePtr == nil || !corePtr.IsRunning() {
+		return
+	}
+	box := corePtr.GetInstance()
+	if box == nil {
+		return
+	}
+	ct := box.ConnTracker()
+	if ct == nil {
+		return
+	}
+	names, err := cs.GetSingleSourceIpClientNames()
+	if err != nil {
+		logger.Warning("single-source-ip client list: ", err)
+		return
+	}
+	ct.SetSingleIpUsers(names)
+}
+
 func (s *ConfigService) Save(obj string, act string, data json.RawMessage, initUsers string, loginUser string, hostname string) ([]string, error) {
 	var err error
 	var objs []string = []string{obj}
@@ -194,9 +222,10 @@ func (s *ConfigService) Save(obj string, act string, data json.RawMessage, initU
 	defer func() {
 		if err == nil {
 			tx.Commit()
-			// Try to start core if it is not running
 			if !corePtr.IsRunning() {
 				s.StartCore()
+			} else {
+				s.syncConnTrackerSingleIp()
 			}
 		} else {
 			tx.Rollback()

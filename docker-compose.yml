@@ -1,8 +1,9 @@
 services:
   s-ui:
-    image: ghcr.io/admin8800/s-ui
-    container_name: s-ui
-    hostname: "s-ui"
+    build: .
+    image: s-ui-plus:local
+    container_name: s-ui-plus
+    hostname: "s-ui-plus"
     network_mode: host
     volumes:
       - "./db:/app/db"

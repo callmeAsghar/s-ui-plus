@@ -61,6 +61,9 @@
                 <v-col cols="12" sm="6" md="4">
                   <v-switch color="primary" v-model="autoReset" :label="$t('client.autoReset')" hide-details></v-switch>
                 </v-col>
+                <v-col cols="12" sm="6" md="4">
+                  <v-switch color="primary" v-model="client.singleSourceIp" :label="$t('client.singleSourceIp')" hide-details />
+                </v-col>
               </v-row>
               <v-row v-if="id > 0">
                 <v-col cols="12" sm="6" md="4" class="d-flex flex-column">

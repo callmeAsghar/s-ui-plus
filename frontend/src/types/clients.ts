@@ -25,6 +25,7 @@ export interface Client {
   nextReset?: number
   totalUp?: number
   totalDown?: number
+  singleSourceIp?: boolean
 }
 
 const defaultClient: Client = {
@@ -45,6 +46,7 @@ const defaultClient: Client = {
   nextReset: 0,
   totalUp: 0,
   totalDown: 0,
+  singleSourceIp: false,
 }
 
 type Config = {
