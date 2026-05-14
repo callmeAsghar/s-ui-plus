@@ -175,9 +175,9 @@ The `links` array on each client (from `load` / `clients`) lists generated URIs 
 
 ## Single source IP limitation
 
-- Enforcement happens in the panel’s [`ConnTracker`](../core/tracker_conn.go) using `metadata.User` from sing-box and the connection’s remote IP.
+- Enforcement happens in the panel’s [`ConnTracker`](../core/tracker_conn.go) using **`metadata.User`** (client name) and a client IP derived from **`metadata.Source`** when it is an IP, otherwise from the socket address on TCP.
 - If `metadata.User` is empty for a flow, that traffic is **not** limited.
-- **UDP / QUIC / multiplexed** traffic may not behave like a single TCP connection; expect different semantics than “one TCP device only.”
+- **UDP / QUIC (including Hysteria2)** — The tracker prefers **`metadata.Source`** (the client address set by the inbound, e.g. [Hysteria2 `NewPacketConnectionEx`](https://github.com/SagerNet/sing-box/blob/dev/protocol/hysteria2/inbound.go)) when it carries an IP, instead of relying on `PacketConn.RemoteAddr()` alone. If `metadata.User` or a usable source IP is missing, enforcement is skipped for that flow.
 - Carrier-grade NAT and mobile networks can share one public IP across many devices; this feature limits **observed source addresses**, not physical devices.
 
 When `singleSourceIp` is enabled, a **new** connection from IP **B** causes existing sessions for the same client from other source IPs to be closed so that only **B** remains (last IP wins).

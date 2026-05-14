@@ -88,6 +88,26 @@ func hostFromNetAddr(addr net.Addr) string {
 	return host
 }
 
+// clientSourceIP prefers sing-box metadata.Source (set by inbounds such as Hysteria2 from the real client UDP path)
+// over conn.RemoteAddr(), which is often the local QUIC stack and not the end client.
+func clientSourceIP(metadata adapter.InboundContext, tcpConn net.Conn, packetConn network.PacketConn) string {
+	if metadata.Source.IsIP() {
+		return metadata.Source.Addr.String()
+	}
+	if tcpConn != nil {
+		return hostFromNetAddr(tcpConn.RemoteAddr())
+	}
+	if packetConn != nil {
+		type withRemote interface {
+			RemoteAddr() net.Addr
+		}
+		if wr, ok := packetConn.(withRemote); ok {
+			return hostFromNetAddr(wr.RemoteAddr())
+		}
+	}
+	return ""
+}
+
 func (c *ConnTracker) singleIPEnforced(user string) bool {
 	if user == "" {
 		return false
@@ -156,7 +176,7 @@ func (c *ConnTracker) linkConnLocked(connID string, ci *ConnectionInfo) {
 func (c *ConnTracker) RoutedConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, matchedRule adapter.Rule, matchOutbound adapter.Outbound) net.Conn {
 	connID := c.generateConnectionID()
 	user := metadata.User
-	srcIP := hostFromNetAddr(conn.RemoteAddr())
+	srcIP := clientSourceIP(metadata, conn, nil)
 
 	var evict []*ConnectionInfo
 	c.access.Lock()
@@ -191,13 +211,7 @@ func (c *ConnTracker) RoutedConnection(ctx context.Context, conn net.Conn, metad
 func (c *ConnTracker) RoutedPacketConnection(ctx context.Context, conn network.PacketConn, metadata adapter.InboundContext, matchedRule adapter.Rule, matchOutbound adapter.Outbound) network.PacketConn {
 	connID := c.generateConnectionID()
 	user := metadata.User
-	srcIP := ""
-	type withRemote interface {
-		RemoteAddr() net.Addr
-	}
-	if wr, ok := conn.(withRemote); ok {
-		srcIP = hostFromNetAddr(wr.RemoteAddr())
-	}
+	srcIP := clientSourceIP(metadata, nil, conn)
 
 	var evict []*ConnectionInfo
 	c.access.Lock()
