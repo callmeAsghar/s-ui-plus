@@ -196,6 +196,7 @@ export default {
     clashSub: "Clash Subscription",
     mixedPort: "Mixed Inbound Port",
     tun: "Tun Inbound",
+    singleSourceIp: "Single source IP for all clients (one active IP per client name)",
   },
   client: {
     name: "Name",
@@ -211,7 +212,6 @@ export default {
     autoReset: "Auto Reset",
     resetDays: "Reset Days",
     nextReset: "Next Reset",
-    singleSourceIp: "Single source IP (one active IP per client name)",
   },
   bulk: {
     order: "Order",

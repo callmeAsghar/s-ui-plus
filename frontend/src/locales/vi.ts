@@ -196,6 +196,7 @@ export default {
     clashSub: "Clash đăng ký",
     mixedPort: "Cổng khóa",
     tun: "Tun đăng ký",
+    singleSourceIp: "Một IP nguồn cho tất cả client (mỗi tên client chỉ một IP hoạt động)",
   },
   client: {
     name: "Tên",
@@ -211,7 +212,6 @@ export default {
     autoReset: "Tự động đặt lại",
     resetDays: "Số ngày đặt lại",
     nextReset: "Đặt lại lần sau",
-    singleSourceIp: "Một IP nguồn (mỗi tên client chỉ một IP hoạt động)",
   },
   bulk: {
     order: "Sắp xếp",

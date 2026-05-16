@@ -65,6 +65,7 @@ var defaultValueMap = map[string]string{
 	"subURI":        "",
 	"subJsonExt":    "",
 	"subClashExt":   "",
+	"singleSourceIp": "false",
 	"config":        defaultConfig,
 	"version":       config.GetVersion(),
 }
@@ -317,6 +318,10 @@ func (s *SettingService) GetSubEncode() (bool, error) {
 
 func (s *SettingService) GetSubShowInfo() (bool, error) {
 	return s.getBool("subShowInfo")
+}
+
+func (s *SettingService) GetSingleSourceIp() (bool, error) {
+	return s.getBool("singleSourceIp")
 }
 
 func (s *SettingService) GetSubURI() (string, error) {

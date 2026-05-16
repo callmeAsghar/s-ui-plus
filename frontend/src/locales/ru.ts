@@ -197,6 +197,7 @@ export default {
     clashSub: "Clash подписка",
     mixedPort: "Смешанный порт",
     tun: "Tun инбоунд",
+    singleSourceIp: "Один исходящий IP для всех клиентов (один активный IP на имя)",
   },
   client: {
     name: "Имя",
@@ -212,7 +213,6 @@ export default {
     autoReset: "Авто сброс",
     resetDays: "Дней до сброса",
     nextReset: "Следующий сброс",
-    singleSourceIp: "Один исходящий IP (один активный IP на имя клиента)",
   },
   bulk: {
     order: "Порядок",

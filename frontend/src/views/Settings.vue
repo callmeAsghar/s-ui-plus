@@ -71,6 +71,9 @@
           <v-col cols="12" sm="6" md="4">
             <v-text-field v-model="settings.timeLocation" :label="$t('setting.timeLoc')" hide-details></v-text-field>
           </v-col>
+          <v-col cols="12" sm="6" md="4">
+            <v-switch color="primary" v-model="singleSourceIp" :label="$t('setting.singleSourceIp')" hide-details />
+          </v-col>
         </v-row>
       </v-window-item>
 
@@ -175,6 +178,7 @@ const settings = ref({
 	subURI: "",
   subJsonExt: "",
   subClashExt: "",
+  singleSourceIp: "false",
 })
 
 onMounted(async () => {
@@ -251,6 +255,11 @@ const subEncode = computed({
 const subShowInfo = computed({
   get: () => { return settings.value.subShowInfo == "true" },
   set: (v:boolean) => { settings.value.subShowInfo = v ? "true" : "false" }
+})
+
+const singleSourceIp = computed({
+  get: () => { return settings.value.singleSourceIp == "true" },
+  set: (v:boolean) => { settings.value.singleSourceIp = v ? "true" : "false" }
 })
 
 const webPort = computed({

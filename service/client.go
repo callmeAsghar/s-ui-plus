@@ -39,7 +39,7 @@ func (s *ClientService) GetAll() (*[]model.Client, error) {
 	db := database.GetDB()
 	var clients []model.Client
 	err := db.Model(model.Client{}).
-		Select("`id`, `enable`, `name`, `desc`, `group`, `inbounds`, `up`, `down`, `volume`, `expiry`, `single_source_ip`").
+		Select("`id`, `enable`, `name`, `desc`, `group`, `inbounds`, `up`, `down`, `volume`, `expiry`").
 		Scan(&clients).Error
 	if err != nil {
 		return nil, err
@@ -548,11 +548,17 @@ func (s *ClientService) findInboundsChanges(tx *gorm.DB, client *model.Client, f
 }
 
 func (s *ClientService) GetSingleSourceIpClientNames() ([]string, error) {
+	var setting SettingService
+	enabled, err := setting.GetSingleSourceIp()
+	if err != nil {
+		return nil, err
+	}
+	if !enabled {
+		return nil, nil
+	}
 	db := database.GetDB()
 	var names []string
-	err := db.Model(model.Client{}).
-		Where("enable = ? AND single_source_ip = ?", true, true).
-		Pluck("name", &names).Error
+	err = db.Model(model.Client{}).Where("enable = ?", true).Pluck("name", &names).Error
 	if err != nil {
 		return nil, err
 	}

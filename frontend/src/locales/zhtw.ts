@@ -196,6 +196,7 @@ export default {
     clashSub: "Clash 訂閱",
     mixedPort: "混合入站端口",
     tun: "Tun 入站",
+    singleSourceIp: "所有用戶端單一來源 IP（每個用戶端名稱僅允許一個使用中來源 IP）",
   },
   client: {
     name: "名稱",
@@ -211,7 +212,6 @@ export default {
     autoReset: "自動重置",
     resetDays: "重置天數",
     nextReset: "下次重置",
-    singleSourceIp: "單一來源 IP（每個用戶端名稱僅允許一個使用中來源 IP）",
   },
   bulk: {
     order: "排序",

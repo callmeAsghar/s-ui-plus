@@ -43,9 +43,6 @@ type Client struct {
 	NextReset  int64 `json:"nextReset" form:"nextReset" gorm:"default:0;not null"`
 	TotalUp    int64 `json:"totalUp" form:"totalUp" gorm:"default:0;not null"`
 	TotalDown  int64 `json:"totalDown" form:"totalDown" gorm:"default:0;not null"`
-
-	// When true, sing-box user traffic for this client name is limited to one active source IP (see docs/API.md).
-	SingleSourceIp bool `json:"singleSourceIp" form:"singleSourceIp" gorm:"default:false;not null"`
 }
 
 type Stats struct {

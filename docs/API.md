@@ -103,7 +103,7 @@ Form fields:
 
 **Expiry** — `expiry` is Unix time in **seconds** (`0` means no expiry).
 
-**Single source IP** — Boolean `singleSourceIp` on the client. When `true`, the core tries to keep only one **source IP** active per client name (sing-box user tag). See limitations below.
+**Single source IP** — Global panel setting (`singleSourceIp` in **Settings → Interface**). When enabled, every **enabled** client is limited to one active source IP at a time (per client name). When disabled, no client is limited. See limitations below.
 
 ### Example: create a client with inbound IDs 1 and 2
 
@@ -111,7 +111,7 @@ Form fields:
 POST /app/api/save
 Content-Type: application/x-www-form-urlencoded
 
-object=clients&action=new&data=%7B%22enable%22%3Atrue%2C%22name%22%3A%22user1%22%2C%22inbounds%22%3A%5B1%2C2%5D%2C%22volume%22%3A0%2C%22expiry%22%3A0%2C%22singleSourceIp%22%3Afalse%2C%22config%22%3A%7B%22vless%22%3A%7B%22name%22%3A%22user1%22%2C%22uuid%22%3A%22...%22%2C%22flow%22%3A%22xtls-rprx-vision%22%7D%7D%7D
+object=clients&action=new&data=%7B%22enable%22%3Atrue%2C%22name%22%3A%22user1%22%2C%22inbounds%22%3A%5B1%2C2%5D%2C%22volume%22%3A0%2C%22expiry%22%3A0%2C%22config%22%3A%7B%22vless%22%3A%7B%22name%22%3A%22user1%22%2C%22uuid%22%3A%22...%22%2C%22flow%22%3A%22xtls-rprx-vision%22%7D%7D%7D
 ```
 
 (URL-decode `data` for readability.) Prefer generating `config` keys to match each selected inbound’s `type`.
@@ -180,7 +180,7 @@ The `links` array on each client (from `load` / `clients`) lists generated URIs 
 - **UDP / QUIC (including Hysteria2)** — The tracker prefers **`metadata.Source`** (the client address set by the inbound, e.g. [Hysteria2 `NewPacketConnectionEx`](https://github.com/SagerNet/sing-box/blob/dev/protocol/hysteria2/inbound.go)) when it carries an IP, instead of relying on `PacketConn.RemoteAddr()` alone. If `metadata.User` or a usable source IP is missing, enforcement is skipped for that flow.
 - Carrier-grade NAT and mobile networks can share one public IP across many devices; this feature limits **observed source addresses**, not physical devices.
 
-When `singleSourceIp` is enabled, a **new** connection from IP **B** causes existing sessions for the same client from other source IPs to be closed so that only **B** remains (last IP wins).
+When the panel setting `singleSourceIp` is `true`, a **new** connection from IP **B** causes existing sessions for the same client from other source IPs to be closed so that only **B** remains (last IP wins). Toggle via `POST {base}api/save` with `object=settings`, `action=set`, and `data` containing `"singleSourceIp": "true"` or `"false"`.
 
 ---
 

@@ -196,6 +196,7 @@ export default {
     clashSub: "سابسکریپشن CLASH",
     mixedPort: "ورودی Mixed",
     tun: "ورودی TUN",
+    singleSourceIp: "IP منبع واحد برای همه کاربران (یک IP فعال برای هر نام کاربر)",
   },
   client: {
     name: "نام",
@@ -211,7 +212,6 @@ export default {
     autoReset: "بازنشانی خودکار",
     resetDays: "روزهای بازنشانی",
     nextReset: "بازنشانی بعدی",
-    singleSourceIp: "IP منبع واحد (یک IP فعال برای هر نام کاربر)",
   },
   bulk: {
     order: "ترتیب",
